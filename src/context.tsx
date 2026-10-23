@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AppState, getInitialState, saveState, WorkoutRecord, WorkoutPlan } from './store';
+import { AppState, getInitialState, saveState, WorkoutRecord, WorkoutPlan, PlannedExercise, isValidDuration, setPlanCompletion } from './store';
 
 interface AppContextType {
   state: AppState;
@@ -9,6 +9,8 @@ interface AppContextType {
   updateGoal: (goal: number) => void;
   updatePlans: (plans: WorkoutPlan[]) => void;
   updateExerciseTypes: (types: string[]) => void;
+  updatePlanDuration: (dayOfWeek: number, name: string, duration: number) => void;
+  setExerciseCompleted: (date: string, exercise: PlannedExercise, completed: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -23,7 +25,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addRecord = (record: Omit<WorkoutRecord, 'id'>) => {
     setState((prev) => ({
       ...prev,
-      records: [...prev.records, { ...record, id: Date.now().toString() }],
+      records: [...prev.records, { ...record, id: crypto.randomUUID() }],
     }));
   };
 
@@ -53,8 +55,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, exerciseTypes: types }));
   };
 
+  const updatePlanDuration = (dayOfWeek: number, name: string, duration: number) => {
+    if (!isValidDuration(duration)) return;
+    setState(prev => ({
+      ...prev,
+      workoutPlans: prev.workoutPlans.map(plan => plan.dayOfWeek === dayOfWeek ? {
+        ...plan,
+        exercises: plan.exercises.map(exercise => exercise.name === name ? { ...exercise, duration } : exercise),
+      } : plan),
+    }));
+  };
+
+  const setExerciseCompleted = (date: string, exercise: PlannedExercise, completed: boolean) => {
+    setState(prev => setPlanCompletion(prev, date, exercise, completed));
+  };
+
   return (
-    <AppContext.Provider value={{ state, addRecord, updateRecord, deleteRecord, updateGoal, updatePlans, updateExerciseTypes }}>
+    <AppContext.Provider value={{ state, addRecord, updateRecord, deleteRecord, updateGoal, updatePlans, updateExerciseTypes, updatePlanDuration, setExerciseCompleted }}>
       {children}
     </AppContext.Provider>
   );

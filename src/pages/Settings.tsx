@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useAppContext } from '../context';
 import { X, Plus, Save } from 'lucide-react';
-import { WorkoutPlan } from '../store';
+import { getDefaultDuration, WorkoutPlan } from '../store';
+import { DurationInput } from '../components/DurationInput';
 
 const dayNames: Record<number, string> = {
   1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日'
@@ -51,8 +52,8 @@ export function Settings() {
     if (ex && ex.trim()) {
       setPlans(plans.map(p => {
         if (p.dayOfWeek === dayOfWeek) {
-          if (p.exercises.includes(ex.trim())) return p; // prevent dup
-          return { ...p, exercises: [...p.exercises, ex.trim()] };
+          if (p.exercises.some(exercise => exercise.name === ex.trim())) return p;
+          return { ...p, exercises: [...p.exercises, { name: ex.trim(), duration: getDefaultDuration(ex.trim()) }] };
         }
         return p;
       }));
@@ -60,7 +61,14 @@ export function Settings() {
   };
 
   const handleRemoveExercise = (dayOfWeek: number, ex: string) => {
-    setPlans(plans.map(p => p.dayOfWeek === dayOfWeek ? { ...p, exercises: p.exercises.filter(e => e !== ex) } : p));
+    setPlans(plans.map(p => p.dayOfWeek === dayOfWeek ? { ...p, exercises: p.exercises.filter(e => e.name !== ex) } : p));
+  };
+
+  const handleUpdateDuration = (dayOfWeek: number, name: string, duration: number) => {
+    setPlans(plans.map(plan => plan.dayOfWeek === dayOfWeek ? {
+      ...plan,
+      exercises: plan.exercises.map(exercise => exercise.name === name ? { ...exercise, duration } : exercise),
+    } : plan));
   };
 
   const handleSavePlans = () => {
@@ -90,16 +98,16 @@ export function Settings() {
         </div>
       </div>
 
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+      <form onSubmit={event => { event.preventDefault(); handleSavePlans(); }} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-5">
           <h2 className="text-sm font-bold text-gray-800">每周训练计划</h2>
-          <button onClick={handleAddPlan} className="text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 active:bg-blue-100">
+          <button type="button" onClick={handleAddPlan} className="text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 active:bg-blue-100">
             <Plus size={14} /> 添加天数
           </button>
         </div>
 
         <div className="space-y-5">
-          {plans.sort((a,b) => a.dayOfWeek - b.dayOfWeek).map(plan => (
+          {[...plans].sort((a,b) => a.dayOfWeek - b.dayOfWeek).map(plan => (
             <div key={plan.dayOfWeek} className="border border-gray-100 rounded-xl p-4 bg-gray-50 relative">
               <div className="flex justify-between items-center mb-3">
                 <select 
@@ -111,21 +119,27 @@ export function Settings() {
                     <option key={d} value={d}>{dayNames[d]}</option>
                   ))}
                 </select>
-                <button onClick={() => handleRemovePlan(plan.dayOfWeek)} className="text-gray-400 hover:text-red-500">
+                <button type="button" aria-label={`删除${dayNames[plan.dayOfWeek]}计划`} onClick={() => handleRemovePlan(plan.dayOfWeek)} className="text-gray-400 hover:text-red-500">
                   <X size={18} />
                 </button>
               </div>
               
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
                 {plan.exercises.map(ex => (
-                  <div key={ex} className="bg-white border border-gray-200 rounded-full px-3 py-1 text-sm flex items-center gap-1 shadow-sm">
-                    {ex}
-                    <button onClick={() => handleRemoveExercise(plan.dayOfWeek, ex)} className="text-gray-400 hover:text-red-500 ml-1">
+                  <div key={ex.name} className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm flex flex-wrap items-center gap-2 shadow-sm">
+                    <span className="flex-1 break-words">{ex.name}</span>
+                    <DurationInput
+                      label={`${dayNames[plan.dayOfWeek]}${ex.name}默认时长（分钟）`}
+                      value={ex.duration}
+                      onChange={duration => handleUpdateDuration(plan.dayOfWeek, ex.name, duration)}
+                    />
+                    <button type="button" aria-label={`删除${dayNames[plan.dayOfWeek]}${ex.name}`} onClick={() => handleRemoveExercise(plan.dayOfWeek, ex.name)} className="text-gray-400 hover:text-red-500 ml-1">
                       <X size={14} />
                     </button>
                   </div>
                 ))}
                 <button 
+                  type="button"
                   onClick={() => handleAddExercise(plan.dayOfWeek)}
                   className="bg-white border border-dashed border-gray-300 text-gray-500 rounded-full px-3 py-1 text-sm flex items-center shadow-sm hover:border-gray-400 hover:text-gray-700"
                 >
@@ -138,13 +152,13 @@ export function Settings() {
         </div>
         
         <button 
-          onClick={handleSavePlans}
+          type="submit"
           className="w-full bg-blue-600 text-white rounded-xl py-3.5 font-bold text-base mt-5 active:bg-blue-700 shadow-sm flex items-center justify-center gap-2"
         >
           <Save size={18} />
           保存训练计划
         </button>
-      </div>
+      </form>
     </div>
   );
 }

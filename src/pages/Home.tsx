@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { useAppContext } from '../context';
+import { DurationInput } from '../components/DurationInput';
+import { PlannedExercise, WorkoutRecord } from '../store';
 import { getWeekInterval, isDateInInterval, formatToDateString, getWeekDays } from '../utils/date';
 import { CheckCircle2, Circle, Check } from 'lucide-react';
 import { getDay } from 'date-fns';
@@ -7,6 +10,50 @@ import { getDay } from 'date-fns';
 function getCustomDay(date: Date) {
   const d = getDay(date);
   return d === 0 ? 7 : d;
+}
+
+function PlanExerciseRow({ dayOfWeek, dayName, date, exercise, records }: {
+  dayOfWeek: number;
+  dayName: string;
+  date: string;
+  exercise: PlannedExercise;
+  records: WorkoutRecord[];
+}) {
+  const { updatePlanDuration, setExerciseCompleted } = useAppContext();
+  const [durationValid, setDurationValid] = useState(true);
+  const done = records.length > 0;
+  const recordedDuration = records.reduce((total, record) => total + record.duration, 0);
+
+  return (
+    <li className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl p-2 ${done ? 'bg-green-50/60' : 'bg-gray-50'}`}>
+      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1 text-sm">
+        <input
+          type="checkbox"
+          checked={done}
+          disabled={!done && !durationValid}
+          aria-label={`${dayName}${exercise.name}完成`}
+          className="h-5 w-5 shrink-0 cursor-pointer accent-green-600 disabled:cursor-not-allowed"
+          onChange={event => {
+            const completed = event.target.checked;
+            if (!completed && (records.length > 1 || records.some(record => record.source !== 'plan'))) {
+              if (!window.confirm(`取消完成将删除 ${date} 的「${exercise.name}」全部 ${records.length} 条锻炼记录（共 ${recordedDuration} 分钟），是否继续？`)) return;
+            }
+            setExerciseCompleted(date, exercise, completed);
+          }}
+        />
+        <span className="min-w-0 break-words">
+          <span className={done ? 'text-gray-500 line-through decoration-gray-300' : 'text-gray-700'}>{exercise.name}</span>
+          {done && <span className="mt-0.5 block text-xs text-green-700">已记录 {recordedDuration} 分钟</span>}
+        </span>
+      </label>
+      <DurationInput
+        label={`${dayName}${exercise.name}默认时长（分钟）`}
+        value={exercise.duration}
+        onChange={duration => updatePlanDuration(dayOfWeek, exercise.name, duration)}
+        onValidityChange={setDurationValid}
+      />
+    </li>
+  );
 }
 
 export function Home() {
@@ -36,7 +83,7 @@ export function Home() {
     
     if (plan) {
       // Check if all exercises are met
-      const hasAllExercises = plan.exercises.every(ex => dailyRecords.some(r => r.type === ex));
+      const hasAllExercises = plan.exercises.length > 0 && plan.exercises.every(ex => dailyRecords.some(r => r.type === ex.name));
       if (hasAllExercises) {
         statusIcon = <Check className="text-green-500 w-4 h-4" />; // ✓
       } else {
@@ -90,26 +137,30 @@ export function Home() {
       {/* Workout Plan Breakdown */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
         <h3 className="text-sm font-bold text-gray-800 mb-2">训练计划执行</h3>
+        <p className="text-xs leading-relaxed text-gray-500">勾选即按默认时长记录在对应日期，取消勾选撤销记录。修改默认时长会用于之后的勾选，已记录时长保持不变。</p>
         {dayStatuses.filter(ds => ds.plan).map(ds => {
           const plan = ds.plan!;
-          const isPlanMet = plan.exercises.every(ex => ds.dailyRecords.some(r => r.type === ex));
+          const isPlanMet = plan.exercises.length > 0 && plan.exercises.every(ex => ds.dailyRecords.some(r => r.type === ex.name));
           return (
             <div key={ds.cDay} className="border-b border-gray-50 pb-3 last:border-0 last:pb-0">
               <div className="flex items-center gap-2 mb-2">
                 <span className="font-bold text-gray-800">周{ds.name}</span>
+                <span className="text-xs text-gray-400">{ds.dateStr.slice(5).replace('-', '/')}</span>
                 {isPlanMet ? <Check className="text-green-500 w-4 h-4" /> : <Circle className="text-gray-400 w-4 h-4" />}
               </div>
-              <ul className="grid grid-cols-1 gap-2 ml-1">
-                {plan.exercises.map(ex => {
-                  const done = ds.dailyRecords.some(r => r.type === ex);
-                  return (
-                    <li key={ex} className={`flex items-center gap-2 text-sm ${done ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {done ? <CheckCircle2 size={14} className="text-green-500"/> : <Circle size={14} className="text-gray-300"/>}
-                      <span className={done ? 'line-through decoration-gray-300' : ''}>{ex}</span>
-                    </li>
-                  )
-                })}
+              <ul className="grid grid-cols-1 gap-2">
+                {plan.exercises.map(exercise => (
+                  <PlanExerciseRow
+                    key={`${ds.dateStr}-${exercise.name}`}
+                    dayOfWeek={ds.cDay}
+                    dayName={`周${ds.name}`}
+                    date={ds.dateStr}
+                    exercise={exercise}
+                    records={ds.dailyRecords.filter(record => record.type === exercise.name)}
+                  />
+                ))}
               </ul>
+              {plan.exercises.length === 0 && <p className="text-xs text-gray-400">尚未添加训练项目</p>}
             </div>
           );
         })}

@@ -23,7 +23,7 @@ export function Stats() {
       const planDateStr = formatToDateString(planDate);
       
       const dailyRecords = weekRecords.filter(r => r.date === planDateStr);
-      const isPlanMet = plan.exercises.every(ex => dailyRecords.some(r => r.type === ex));
+      const isPlanMet = plan.exercises.length > 0 && plan.exercises.every(ex => dailyRecords.some(r => r.type === ex.name));
       if (isPlanMet) planMetCount++;
     });
 
